@@ -1,0 +1,95 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library("XML")
+library("httr")
+library('plyr')
+library('lubridate')
+library('bizdays')
+library('RQuantLib')
+library('stringr')
+library('naniar')
+library('gsubfn')
+library('openxlsx')
+library('janitor')
+library('readxl')
+library("tidyverse")
+```
+
+
+```{r}
+funcion_reporte <- function(fecha_inicio , fecha_fin, area, todos) { 
+  #cargo el dataframe
+  df <- read.csv("https://cdn.buenosaires.gob.ar/datosabiertos/datasets/ministerio-de-gobierno/acceso-informacion-publica/acceso_info_publica.csv", encoding = "UTF-8", sep = ";") 
+  #filtro por periodo
+  dataframe$fecha <- as.Date(dataframe$fecha,format = "%d/%m/%Y")
+  a <- fecha_inicio
+  b <- fecha_fin
+  f_inicio <- as.Date(a, format='%Y/%m/%d')
+  f_fin <- as.Date(b, format='%Y/%m/%d')
+  df <- df %>% filter(fecha>=f_inicio & fecha<=f_fin) 
+  if(todos == "NO") {   
+  df <- df %>%  filter(grepl(area, ministerio, ignore.case = TRUE))}
+  else {}
+
+  #anoto incomparecencias
+  df_inc <- df%>% mutate(art_11=case_when(grepl("INCOMPARECENCIA", contenido_respuesta)~2),
+                  art_11=case_when(grepl("INCOMPARECENCIA", observaciones)~2, TRUE~art_11))
+  df_sin_inc <-  df_inc %>% filter(is.na(art_11) | art_11!=2)
+  solic_sin_inc <- nrow(df_sin_inc)
+  solic_con_inc <- nrow(df_inc)
+  #top de ministerios
+  top_ministerios <- group_by(df, ministerio) %>%
+    summarise(n = n()) 
+  top_ministerios <-top_ministerios[order(-top_ministerios$n),]
+  #top temas
+  top_temas <- group_by(df, categoria_tema) %>%
+    summarise(n =n())
+  top_temas <-   top_temas[order(-top_temas$n),]
+  #total respondidas
+  incomp19 <- length(which(df_inc$art_11==2))
+  respondidas <- as.integer(df_sin_inc %>% filter(grepl("FINALIZADO", estado)) %>% dplyr::summarise(total = n()))
+  pendientes <- as.integer(df_sin_inc %>% filter(grepl("PENDIENTE", estado)) %>% dplyr::summarise(total = n()))
+  respondidas_sobre_totales <- round(((respondidas/solic_sin_inc)*100),2)
+  df_solic <- data.frame(solic_sin_inc, respondidas)
+  df_solicitudes <- data.frame(' '=c('Solicitudes', 'Incomparecencias de Art. 11', 'Solicitudes respondidas', '% de solicitudes respondidas'), 'valores' = c(solic_con_inc, incomp19, respondidas, respondidas_sobre_totales))
+  #incomparecencias
+  incomp <- length(which(df_inc$art_11==2))
+  df_solic_inc <- data.frame(incomp)
+  df_solic <- data.frame(df, respondidas)
+  #estado de los expedientes
+  estado <- group_by(df_sin_inc, estado) %>%
+    summarise(n =n())
+  #Tiempo de respuesta y prorrogas
+    prorrogas <- as.integer(nrow(df_sin_inc %>% filter(prorroga=='SI')))
+    prom_dias_rta <- as.integer(df_sin_inc %>% filter(grepl('FINALIZADO', estado)) %>%
+                                dplyr::summarise(promedio=mean(tiempo_de_respuesta, na.rm = TRUE)))
+    min_dias_rta <- as.integer(df_sin_inc %>% filter(grepl('FINALIZADO', estado)) %>%     
+                               dplyr::summarise(min=min(tiempo_de_respuesta, na.rm = TRUE)))
+    max_dias_rta <- as.integer(df_sin_inc %>% filter(grepl('FINALIZADO', estado)) %>% 
+                               dplyr::summarise(max=max(tiempo_de_respuesta, na.rm = TRUE)))
+  if(min_dias_rta==0){
+    min_dias_rta <- 1
+  }
+
+  df_tiempos_rta <- data.frame("cols" = c('Prórrogas','Tiempo de respuesta promedio', 'Tiempo mínimo de respuesta', 'Tiempo máximo de respuesta'), "dias hábiles" = c(prorrogas, prom_dias_rta, min_dias_rta, max_dias_rta))
+  #calidad de respuesta
+  df_calidad_respuesta <- as.data.frame(df_sin_inc %>% filter(grepl('FINALIZADO', estado)) %>% 
+                                            group_by(calidad_respuesta) %>% dplyr::summarise(total = n()))
+  df_calidad_respuesta <- df_calidad_respuesta[order(-df_calidad_respuesta$total),]
+  #escribo un excel con todo
+  funcion_xlsx <- list(df_solicitudes, estado,df_tiempos_rta,df_calidad_respuesta, top_ministerios, top_temas, df)
+  openxlsx::write.xlsx(funcion_xlsx, paste0("reporte_",area, ".xlsx"))
+}
+
+funcion_reporte("2020/01/01", "2021/01/01", "salud", "SI")
+#todos tiene que ser SI o NO
+
+```
