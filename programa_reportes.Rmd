@@ -85,7 +85,10 @@ funcion_reporte <- function(fecha_inicio , fecha_fin, area, todos) {
   openxlsx::write.xlsx(funcion_xlsx, paste0("reporte_",area, ".xlsx"))
 }
 
-funcion_reporte("2020/01/01", "2021/01/01", "salud", "SI")
+funcion_reporte("fecha_inicio" #YYYY/MM/DD,
+                "fecha_fin" #YYYY/MM/DD, 
+                "ministerio, 
+                "todos")
 #todos tiene que ser SI o NO
 
 ```
